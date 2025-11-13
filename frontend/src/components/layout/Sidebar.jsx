@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-// --- 1. IMPORT ALL ICONS (including FaHome) ---
 import { 
-  FaHome, // <-- Added
+  FaHome, 
   FaChartPie, 
   FaEye, 
   FaSearchDollar, 
@@ -15,7 +14,15 @@ import AddFundsModal from '../AddFundsModal';
 
 const NavLink = ({ to, icon, children }) => {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  // Check if pathname starts with the route for partial active matching
+  const isActive = location.pathname.startsWith(to) && to !== '/' || location.pathname === to; 
+  
+  // Custom check for the root path
+  if (to === '/' && location.pathname === '/home') {
+    // If we're on the /home dashboard, keep the home link highlighted
+    isActive = true;
+  }
+  
   const activeClass = isActive ? 'bg-green-500 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white';
 
   return (
@@ -33,8 +40,9 @@ function Sidebar() {
   const { logout, walletBalance, fetchWalletBalance } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // --- CLEAN CONTEXT LOGOUT ---
   const handleLogout = () => {
-    logout(); 
+    logout(); // This clears the session and redirects to /landing
   };
 
   const handleFundsSuccess = () => {
@@ -43,12 +51,12 @@ function Sidebar() {
 
   return (
     <> 
-      <div className="flex flex-col w-64 h-screen px-4 py-8 bg-gray-800 text-white">
+      <div className="flex flex-col w-64 h-screen px-4 py-8 bg-gray-900 text-white"> {/* Dark Background */}
         <h2 className="text-3xl font-bold text-green-400 mb-8 px-4">Investify</h2>
         
-        {/* --- 2. UPDATED NAVIGATION (with "Home" link) --- */}
         <nav className="flex-1 space-y-2">
-          <NavLink to="/" icon={<FaHome size={18} />}>
+          {/* --- ADDED HOME LINK --- */}
+          <NavLink to="/home" icon={<FaHome size={18} />}>
             Home
           </NavLink>
           <NavLink to="/dashboard" icon={<FaChartPie size={18} />}>
@@ -64,7 +72,6 @@ function Sidebar() {
             Market
           </NavLink>
         </nav>
-        {/* --- END OF UPDATED NAVIGATION --- */}
 
         {/* --- WALLET SECTION (Unchanged) --- */}
         <div className="mt-auto space-y-4">
@@ -83,7 +90,7 @@ function Sidebar() {
           </button>
           {/* --- END WALLET SECTION --- */}
 
-          {/* Logout Button (Unchanged) */}
+          {/* --- LOGOUT BUTTON USES CONTEXT HANDLER --- */}
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 hover:text-white"
