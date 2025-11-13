@@ -4,13 +4,12 @@ import {
   searchSymbols, 
   getCompanyNews, 
   getStockCandles,
-  getTopGainers, 
-  getTopLosers  
+  getMarketIndices 
 } from '../api/marketService';
 import { addToWatchlist } from '../api/watchlistService';
 import { FaSearch } from 'react-icons/fa';
 import StockChart from '../components/StockChart';
-import MarketMoversList from '../components/market/MarketMoversList';
+import MarketIndicesList from '../components/market/MarketIndicesList'; // <-- Use the Indices List
 
 const formatCandleData = (finnhubData) => {
   if (!finnhubData || finnhubData.s !== 'ok') {
@@ -27,7 +26,7 @@ const formatCandleData = (finnhubData) => {
 
 const formatPrice = (price) => {
     if (typeof price !== 'number') return '$0.00';
-    return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatChange = (change, changePercent) => {
@@ -37,7 +36,7 @@ const formatChange = (change, changePercent) => {
     const sign = isProfit ? '+' : '';
     return (
       <span className={color}>
-        {sign}{formatPrice(change)} ({sign}{formatPrice(changePercent)}%)
+        {sign}{change.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({sign}{changePercent.toFixed(2)}%)
       </span>
     );
 };
@@ -52,29 +51,23 @@ function MarketPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
-  const [gainers, setGainers] = useState([]);
-  const [losers, setLosers] = useState([]);
+  const [marketIndices, setMarketIndices] = useState([]);
   const [loadingMovers, setLoadingMovers] = useState(true);
 
   useEffect(() => {
     const fetchMovers = async () => {
       try {
         setLoadingMovers(true);
-        const [gainersRes, losersRes] = await Promise.all([
-          getTopGainers(),
-          getTopLosers()
-        ]);
-        setGainers(gainersRes.data);
-        setLosers(losersRes.data);
+        const indicesRes = await getMarketIndices(); 
+        setMarketIndices(indicesRes.data);
       } catch (err) {
-        console.error("Failed to fetch market movers:", err);
+        console.error("Failed to fetch market indices:", err);
       } finally {
         setLoadingMovers(false);
       }
     };
     fetchMovers();
   }, []); 
-
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -130,27 +123,21 @@ function MarketPage() {
     <div className="p-8 text-white">
       <h1 className="text-4xl font-bold text-green-400 mb-8">Market</h1>
       
-      {/* --- MARKET MOVERS SECTION --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         {loadingMovers ? (
-          <p>Loading market movers...</p>
+          <p>Loading market indices...</p>
         ) : (
-          <>
-            <MarketMoversList title="Top Gainers" data={gainers} listType="Gainers" />
-            <MarketMoversList title="Top Losers" data={losers} listType="Losers" />
-          </>
+          <MarketIndicesList title="Market Indices" data={marketIndices} />
         )}
       </div>
-      {/* --- END OF MOVERS SECTION --- */}
 
-      {/* --- SEARCH BAR --- */}
       <form onSubmit={handleSearch} className="flex w-full max-w-lg mb-4">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="flex-grow px-3 py-2 text-gray-200 bg-gray-700 border border-gray-600 rounded-l-md"
-          placeholder="Search for a symbol (e.g., AAPL, MSFT...)"
+          placeholder="Search for a symbol (e.g., RELIANCE, TCS...)"
         />
         <button
           type="submit"
@@ -162,11 +149,9 @@ function MarketPage() {
 
       {error && <p className="text-red-400 mb-4">{error}</p>}
 
-      {/* --- RESULTS SECTION --- */}
       <div className="w-full max-w-4xl">
         {loading && <p>Loading...</p>}
 
-        {/* Search Results List */}
         {results.length > 0 && (
           <div className="bg-gray-800 rounded-lg shadow-lg">
             {results.map((item) => (
@@ -185,7 +170,6 @@ function MarketPage() {
           </div>
         )}
 
-        {/* Selected Stock Details */}
         {selected && quote && (
           <div className="mt-8">
             <div className="flex justify-between items-center mb-4">
@@ -199,11 +183,10 @@ function MarketPage() {
             </div>
             
             <div className="p-6 bg-gray-800 rounded-lg shadow-lg mb-8">
-              <div className="text-4xl font-bold">${formatPrice(quote.c)}</div>
+              <div className="text-4xl font-bold">{formatPrice(quote.c)}</div>
               <div className="text-lg">{formatChange(quote.d, quote.dp)}</div>
             </div>
 
-            {/* RENDER THE CHART */}
             <div className="bg-gray-800 rounded-lg shadow-lg mb-8">
               {chartData.length > 0 ? (
                 <StockChart data={chartData} />
@@ -211,7 +194,6 @@ function MarketPage() {
                 <p className="p-8 text-center text-gray-400">No chart data available.</p>
               )}
             </div>
-            {/* END OF CHART */}
 
             <h3 className="text-2xl font-semibold mb-4">Recent News</h3>
             <div className="space-y-4">

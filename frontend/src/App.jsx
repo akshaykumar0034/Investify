@@ -1,38 +1,58 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
+
+// Layouts
+import PublicLayout from './components/layout/PublicLayout';
+import MainLayout from './components/layout/MainLayout';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Public Pages
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
+
+// App Pages
+import HomePage from './pages/HomePage';
 import Dashboard from './pages/Dashboard';
-import ProtectedRoute from './components/ProtectedRoute';
 import WatchlistPage from './pages/WatchlistPage';
 import MarketPage from './pages/MarketPage';
 import OrdersPage from './pages/OrdersPage';
-import MainLayout from './components/layout/MainLayout';
-import HomePage from './pages/HomePage'; // <-- 1. IMPORT NEW HOMEPAGE
+
+// This component will handle the root redirect
+function Root() {
+  const { user } = useAuth();
+  // If user is logged in, go to /home. If not, go to the landing page.
+  return user ? <Navigate to="/home" /> : <Navigate to="/landing" />;
+}
 
 function App() {
   return (
     <Routes>
-      {/* --- Public Routes --- */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      
-      {/* --- Protected Routes (and the new public HomePage) --- */}
-      {/* Wrap all main app pages in the layout */}
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<HomePage />} /> {/* <-- 2. SET HOMEPAGE AS ROOT */}
-        
-        {/* These routes require a user to be logged in */}
-        <Route element={<ProtectedRoute />}>
+      {/* --- Public Routes (with new Navbar/Footer) --- */}
+      <Route element={<PublicLayout />}>
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+      </Route>
+
+      {/* --- Protected App Routes (with Sidebar/Footer) --- */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/home" element={<HomePage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/market" element={<MarketPage />} />
         </Route>
-        
-        {/* This page is public but uses the layout */}
-        <Route path="/market" element={<MarketPage />} /> 
       </Route>
       
+      {/* --- Root Redirect --- */}
+      <Route path="/" element={<Root />} />
+      
+      {/* --- 404 Not Found (Optional but recommended) --- */}
+      <Route path="*" element={<div><h2>404 Not Found</h2></div>} />
+
     </Routes>
   );
 }

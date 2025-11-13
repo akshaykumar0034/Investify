@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-// --- 1. IMPORT THE NEW ORDER SERVICE ---
+// --- 1. IMPORT THE CORRECT SERVICES ---
 import { placeOrder } from '../api/orderService'; 
-import { getQuote } from '../api/marketService';
+import { getQuote } from '../api/marketService'; // This now uses Finnhub
 import { useAuth } from '../context/AuthContext'; 
 
 function TradeModal({ onClose, onSuccess }) {
@@ -12,26 +12,30 @@ function TradeModal({ onClose, onSuccess }) {
   const [error, setError] = useState(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
   
-  // --- 2. NEW STATE FOR ORDER TYPE ---
+  // --- 2. STATE FOR ORDER TYPE ---
   const [orderType, setOrderType] = useState('MARKET'); // 'MARKET' or 'LIMIT'
   const [limitPrice, setLimitPrice] = useState('');
   
   const { fetchWalletBalance } = useAuth();
   
-  // Effect to fetch live price (unchanged)
+  // --- 3. THIS useEffect IS CORRECT ---
+  // It fetches the Finnhub quote object and uses 'res.data.c'
   useEffect(() => {
     if (ticker.length > 1) {
       setLoadingPrice(true);
       const timer = setTimeout(async () => {
         try {
           const res = await getQuote(ticker.toUpperCase());
-          setPrice(res.data.c); // Set the market price
+          if (!res.data || res.data.c === 0) { // Check for valid data
+             throw new Error("Invalid ticker");
+          }
+          setPrice(res.data.c); // Set the market price (Finnhub format)
           setLimitPrice(res.data.c.toFixed(2)); // Default limit price to market price
           setLoadingPrice(false);
           setError(null);
         } catch (err) {
           setLoadingPrice(false);
-          setError("Invalid ticker");
+          setError("Invalid ticker (US Stocks Only)"); // Update error
         }
       }, 500); 
       return () => clearTimeout(timer);
@@ -42,24 +46,24 @@ function TradeModal({ onClose, onSuccess }) {
     e.preventDefault();
     setError(null);
 
-    // --- 3. BUILD THE NEW ORDER REQUEST ---
+    // --- 4. BUILD THE ORDER REQUEST ---
     const orderData = {
       ticker: ticker.toUpperCase(),
       quantity: parseFloat(quantity),
+      // Use live market price for MARKET, or user's limit price for LIMIT
       price: orderType === 'MARKET' ? parseFloat(price) : parseFloat(limitPrice),
       date: new Date().toISOString(),
       type: tradeType,
       orderType: orderType,
     };
     
-    // Simple validation
     if (orderType === 'LIMIT' && (!orderData.price || orderData.price <= 0)) {
         setError("Please enter a valid limit price.");
         return;
     }
 
     try {
-      // --- 4. USE THE NEW placeOrder SERVICE ---
+      // --- 5. USE THE placeOrder SERVICE ---
       await placeOrder(orderData);
       
       fetchWalletBalance(); // Refresh wallet
@@ -75,7 +79,7 @@ function TradeModal({ onClose, onSuccess }) {
     ? parseFloat(quantity) * parseFloat(orderType === 'MARKET' ? price : limitPrice) 
     : 0;
 
-  // --- 5. UPDATED JSX ---
+  // --- 6. THE JSX IS CORRECT ---
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
@@ -85,13 +89,23 @@ function TradeModal({ onClose, onSuccess }) {
         className="bg-gray-800 text-white p-8 rounded-lg shadow-lg w-full max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* BUY/SELL Toggle (Unchanged) */}
+        {/* BUY/SELL Toggle */}
         <div className="flex mb-4 border border-gray-600 rounded-lg overflow-hidden">
-          {/* ... (BUY button) ... */}
-          {/* ... (SELL button) ... */}
+          <button
+            onClick={() => setTradeType('BUY')}
+            className={`w-1/2 py-3 font-semibold ${tradeType === 'BUY' ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+          >
+            BUY
+          </button>
+          <button
+            onClick={() => setTradeType('SELL')}
+            className={`w-1/2 py-3 font-semibold ${tradeType === 'SELL' ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+          >
+            SELL
+          </button>
         </div>
         
-        {/* --- NEW: MARKET/LIMIT TOGGLE --- */}
+        {/* MARKET/LIMIT TOGGLE */}
         <div className="flex justify-center mb-6 space-x-4">
           <button
             onClick={() => setOrderType('MARKET')}
@@ -138,7 +152,7 @@ function TradeModal({ onClose, onSuccess }) {
             />
           </div>
           
-          {/* --- NEW: Conditional Price Fields --- */}
+          {/* Conditional Price Fields */}
           {orderType === 'MARKET' ? (
             <div>
               <label className="block text-sm font-medium text-gray-300">Market Price</label>
@@ -172,7 +186,13 @@ function TradeModal({ onClose, onSuccess }) {
           </div>
           
           <div className="flex justify-end space-x-4 pt-4">
-            {/* ... (Cancel button) ... */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-white bg-gray-600 rounded-md hover:bg-gray-500"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               className={`px-4 py-2 text-white font-semibold rounded-md ${tradeType === 'BUY' ? 'bg-green-500 hover:bg-green-400' : 'bg-red-500 hover:bg-red-400'}`}
