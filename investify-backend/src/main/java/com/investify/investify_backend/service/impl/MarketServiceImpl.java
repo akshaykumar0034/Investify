@@ -2,7 +2,6 @@ package com.investify.investify_backend.service.impl;
 
 import com.investify.investify_backend.dto.*;
 import com.investify.investify_backend.service.MarketService;
-import com.investify.investify_backend.dto.MarketStatusDto;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,25 +20,29 @@ public class MarketServiceImpl implements MarketService {
     private static final Logger logger = LoggerFactory.getLogger(MarketServiceImpl.class);
     private final RestTemplate restTemplate;
 
+    // Finnhub
     @Value("${finnhub.api.key}")
-    private String apiKey; // Finnhub key
-
+    private String apiKey;
     @Value("${finnhub.api.baseurl}")
-    private String baseUrl; // Finnhub URL
+    private String baseUrl;
 
+    // Financial Modeling Prep
     @Value("${fmp.api.key}")
     private String fmpApiKey;
     @Value("${fmp.api.baseurl}")
     private String fmpBaseUrl;
 
+    // Alpha Vantage (unused, but fine to keep)
     @Value("${alphavantage.api.key}")
-    private String alphaVantageApiKey; // Alpha Vantage Key
+    private String alphaVantageApiKey;
     @Value("${alphavantage.api.baseurl}")
-    private String alphaVantageBaseUrl; // Alpha Vantage URL
+    private String alphaVantageBaseUrl;
 
+    // --- THIS IS THE CORRECT, FIXED getQuote METHOD ---
     @Override
     @Cacheable("quotes-v3")
     public QuoteDto getQuote(String symbol) {
+        // This now matches the interface and uses Finnhub
         String url = String.format("%s/quote?symbol=%s&token=%s", baseUrl, symbol, apiKey);
         logger.info("Calling Finnhub API: {}", url);
         try {
@@ -48,7 +51,7 @@ public class MarketServiceImpl implements MarketService {
             return quote;
         } catch (Exception e) {
             logger.error("Error calling Finnhub for symbol: {}", symbol, e);
-            throw e;
+            throw new RuntimeException("Could not fetch quote", e); // Throw exception
         }
     }
 
@@ -78,7 +81,7 @@ public class MarketServiceImpl implements MarketService {
             FinnhubNews[] newsArray = restTemplate.getForObject(url, FinnhubNews[].class);
             return (newsArray != null) ? Arrays.asList(newsArray) : Collections.emptyList();
         } catch (Exception e) {
-            logger.error("Error calling Finnhub news: {}", symbol, e);
+            logger.error("Error calling Finnhub news: {}", e.getMessage());
             throw e;
         }
     }
@@ -108,39 +111,9 @@ public class MarketServiceImpl implements MarketService {
         }
     }
 
-    // --- THIS IS THE FIX ---
-    @Cacheable("av-movers") // Only one '@'
-    public AlphaVantageMoversResponse getAlphaVantageMovers() {
-        // --- END OF FIX ---
-        String url = String.format("%s/query?function=TOP_GAINERS_LOSERS&apikey=%s",
-                alphaVantageBaseUrl, alphaVantageApiKey);
-        logger.info("Calling Alpha Vantage API for movers: {}", url);
-        try {
-            return restTemplate.getForObject(url, AlphaVantageMoversResponse.class);
-        } catch (Exception e) {
-            logger.error("Error calling Alpha Vantage movers", e);
-            return new AlphaVantageMoversResponse(); // Return empty object on error
-        }
-    }
-
-    @Override
-    public List<AlphaVantageMoverDto> getTopGainers() {
-        AlphaVantageMoversResponse response = getAlphaVantageMovers();
-        return (response != null && response.getTopGainers() != null) ?
-                response.getTopGainers() : Collections.emptyList();
-    }
-
-    @Override
-    public List<AlphaVantageMoverDto> getTopLosers() {
-        AlphaVantageMoversResponse response = getAlphaVantageMovers();
-        return (response != null && response.getTopLosers() != null) ?
-                response.getTopLosers() : Collections.emptyList();
-    }
-
     @Override
     @Cacheable("market-status")
     public MarketStatusDto getMarketStatus(String exchange) {
-        // We use Finnhub's 'market-status' endpoint. 'US' for US Market.
         String url = String.format("%s/stock/market-status?exchange=%s&token=%s",
                 baseUrl, exchange, apiKey);
         logger.info("Calling Finnhub API for market status: {}", url);
@@ -148,11 +121,24 @@ public class MarketServiceImpl implements MarketService {
             return restTemplate.getForObject(url, MarketStatusDto.class);
         } catch (Exception e) {
             logger.error("Error calling Finnhub market status", e);
-            // Return a default "closed" status on error
             MarketStatusDto errorStatus = new MarketStatusDto();
             errorStatus.setIsOpen(false);
             errorStatus.setExchange(exchange);
             return errorStatus;
+        }
+    }
+
+    @Override
+    @Cacheable("indices")
+    public List<FmpMoverDto> getMarketIndices() {
+        String url = String.format("%s/quote/%%5ENSEI,%%5EBSESN?apikey=%s", fmpBaseUrl, fmpApiKey);
+        logger.info("Calling FMP API for market indices: {}", url);
+        try {
+            FmpMoverDto[] response = restTemplate.getForObject(url, FmpMoverDto[].class);
+            return (response != null) ? Arrays.asList(response) : Collections.emptyList();
+        } catch (Exception e) {
+            logger.error("Error calling FMP indices", e);
+            return Collections.emptyList();
         }
     }
 }

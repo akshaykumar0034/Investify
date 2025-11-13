@@ -1,31 +1,34 @@
 package com.investify.investify_backend.service.impl;
 
+// --- 1. UPDATE IMPORTS ---
+import com.investify.investify_backend.dto.QuoteDto; // <-- Use Finnhub's QuoteDto
 import com.investify.investify_backend.dto.TransactionRequest;
 import com.investify.investify_backend.entity.Order;
 import com.investify.investify_backend.entity.User;
 import com.investify.investify_backend.repository.OrderRepository;
 import com.investify.investify_backend.repository.UserRepository;
+import com.investify.investify_backend.service.MarketService;
 import com.investify.investify_backend.service.OrderService;
 import com.investify.investify_backend.service.TransactionService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import com.investify.investify_backend.dto.QuoteDto;
-import com.investify.investify_backend.service.MarketService;
-import java.time.LocalDateTime;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
+    private static final Logger logger = LoggerFactory.getLogger(OrderServiceImpl.class);
+
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final TransactionService transactionService;
     private final MarketService marketService;
-    private static final Logger logger = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     @Override
     @Transactional
@@ -49,7 +52,6 @@ public class OrderServiceImpl implements OrderService {
             order.setExecutedAt(LocalDateTime.now());
         } else {
             // If it's a Limit order, just save it as "PENDING"
-            // We'll also check if they have enough funds/shares to place it
             validateLimitOrder(user, order);
             order.setStatus("PENDING");
         }
@@ -63,9 +65,7 @@ public class OrderServiceImpl implements OrderService {
             if (user.getWalletBalance() < cost) {
                 throw new IllegalStateException("Insufficient funds to place limit order.");
             }
-            // In a real system, we would "hold" these funds.
         }
-        // We'll skip SELL validation for now to keep it simpler
     }
 
     @Override
@@ -75,10 +75,10 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findByUserOrderByCreatedAtDesc(user);
     }
 
+    // --- THIS IS THE UPDATED METHOD ---
     @Override
     public void processPendingOrders() {
         logger.info("--- 🤖 Order Execution Job STARTING ---");
-        // 1. Find all pending orders
         List<Order> pendingOrders = orderRepository.findByStatus("PENDING");
 
         if (pendingOrders.isEmpty()) {
@@ -90,9 +90,17 @@ public class OrderServiceImpl implements OrderService {
 
         for (Order order : pendingOrders) {
             try {
-                // 2. Get live price for the order's ticker
+                // --- 2. THIS IS THE FIX ---
+                // getQuote now returns a single Finnhub DTO
                 QuoteDto quote = marketService.getQuote(order.getTicker());
+                if (quote == null || quote.getCurrentPrice() == null || quote.getCurrentPrice() == 0) {
+                    logger.warn("Could not find valid quote for ticker: {}", order.getTicker());
+                    continue; // Skip to the next order
+                }
+
+                // Get the current price
                 double livePrice = quote.getCurrentPrice();
+                // --- END OF FIX ---
 
                 boolean shouldExecute = false;
 
@@ -119,14 +127,12 @@ public class OrderServiceImpl implements OrderService {
                     txRequest.setQuantity(order.getQuantity());
                     txRequest.setPrice(livePrice); // Execute at the *live* price
                     txRequest.setDate(LocalDateTime.now());
+                    txRequest.setOrderType("MARKET"); // It's now a market execution
 
-                    // We call addTransaction, which already handles wallet/holding logic!
-                    // This needs to be @Transactional
                     executeTrade(order, txRequest);
                 }
 
             } catch (Exception e) {
-                // If one order fails (e.g., API limit, insufficient funds), log it and continue
                 logger.error("Failed to process order {}: {}", order.getId(), e.getMessage());
             }
         }
